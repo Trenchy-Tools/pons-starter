@@ -21,35 +21,26 @@
 import fs from "node:fs"
 import path from "node:path"
 import type { PrivateKeyAccount } from "viem/accounts"
-import { accountFrom, newPrivateKey, normalizeKey } from "./evm"
+import type { WalletStore } from "./core/env"
+import { NotBackedUpError as BackupRefusal } from "./core/errors"
+import { accountFrom, newPrivateKey, normalizeKey } from "./core/evm"
+import { APP_NAME, CHAIN, CSV_HEADER, KEEP_NOTE as NOTE, csvField, isRole, parseCsvLine, same, type Role, type WalletFile, type WalletInfo } from "./core/wallet-record"
 import { BACKUP_DIR, ensureDirs } from "./paths"
 import { readSettings, updateSettings } from "./settings"
 
-export const APP_NAME = "trenchytools-pons-starter"
-export const CHAIN = "rh"
-export const ROLES = ["funding", "bundle", "sniper", "holder", "trader"] as const
-export type Role = (typeof ROLES)[number]
-export const isRole = (v: unknown): v is Role => typeof v === "string" && (ROLES as readonly string[]).includes(v)
-
-export type WalletFile = { publicKey: string; privateKey: string; chain: string; role: Role; label: string; createdAt: string; app: string }
-/** What the UI sees: everything but the secret, plus the file name. */
-export type WalletInfo = Omit<WalletFile, "privateKey"> & { file: string }
+export { APP_NAME, CHAIN, ROLES, isRole, type Role, type WalletFile, type WalletInfo } from "./core/wallet-record"
 
 const CSV_FILE = path.join(BACKUP_DIR, "wallets.csv")
-const CSV_HEADER = "createdAt,chain,role,label,publicKey,privateKey\n"
 const ARCHIVE_DIR = path.join(BACKUP_DIR, "archived")
 const ADDRESS_RE = /-(0x[0-9a-fA-F]{40})\.json$/
-const NOTE = "Keep this file. Anyone with privateKey controls the wallet. Robinhood Chain (EVM, chain id 4663)."
 
-export class NotBackedUpError extends Error {
-  code = "not_backed_up" as const
-  hint = "Run 'Rewrite backups' on the Wallets page, or restore the file from wallets.csv"
-  constructor(public publicKey: string) {
-    super(`Wallet ${publicKey.slice(0, 10)}… has no file in ${BACKUP_DIR}; refusing to fund or use it`)
+/** The backup rule's refusal in local mode: the wallet's file is missing from the folder (409 not_backed_up). */
+export class NotBackedUpError extends BackupRefusal {
+  constructor(publicKey: string) {
+    super(publicKey, `Wallet ${publicKey.slice(0, 10)}… has no file in ${BACKUP_DIR}; refusing to fund or use it`, "Run 'Rewrite backups' on the Wallets page, or restore the file from wallets.csv", BACKUP_DIR)
   }
 }
 
-const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 const publicView = (w: WalletFile, file: string): WalletInfo => ({ publicKey: w.publicKey, chain: w.chain, role: w.role, label: w.label, createdAt: w.createdAt, app: w.app, file: path.basename(file) })
 
 /** Parse one wallet file; null when it is not a Robinhood wallet of this folder or the key does not match the name. */
@@ -158,7 +149,6 @@ export function exportKeys(publicKeys: string[]): Array<{ publicKey: string; pri
 }
 
 const safe = (s: string) => (s.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "wallet").slice(0, 40)
-const csvField = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s)
 
 /**
  * Write one wallet: its JSON file (created exclusively, never overwritten) and its CSV line. Synchronous, and done
@@ -180,24 +170,6 @@ function appendCsv(w: WalletFile): void {
   if (!fs.existsSync(CSV_FILE)) fs.writeFileSync(CSV_FILE, CSV_HEADER, { mode: 0o600 })
   else migrateCsv()
   fs.appendFileSync(CSV_FILE, [w.createdAt, w.chain, w.role, csvField(w.label), w.publicKey, w.privateKey].join(",") + "\n")
-}
-
-function parseCsvLine(line: string): string[] {
-  const cells: string[] = []
-  let cur = ""
-  let q = false
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i]
-    if (q) {
-      if (c === '"' && line[i + 1] === '"') { cur += '"'; i++ }
-      else if (c === '"') q = false
-      else cur += c
-    } else if (c === '"') q = true
-    else if (c === ",") { cells.push(cur); cur = "" }
-    else cur += c
-  }
-  cells.push(cur)
-  return cells
 }
 
 type CsvRow = { createdAt: string; chain: string; role: string; label: string; publicKey: string; privateKey: string }
@@ -377,4 +349,15 @@ export function pickOrCreate(role: Role, count: number, label: string): WalletIn
   if (have.length >= count) return have.slice(0, count)
   const made = createWallets(count - have.length, role, label)
   return [...have, ...made.map(({ path: _p, ...w }) => { void _p; return w })]
+}
+
+/** This folder as the store the shared flows use (lib/core/env.ts): launch, trading, funding. */
+export const walletStore: WalletStore = {
+  place: "folder",
+  list: (role) => listWallets(role),
+  get: getWallet,
+  main: mainWallet,
+  assertBackedUp,
+  accountOf,
+  create: (count, role = "trader", label) => createWallets(count, role, label).map(({ path: _p, ...w }) => { void _p; return w }),
 }

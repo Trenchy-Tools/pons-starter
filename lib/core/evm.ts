@@ -1,12 +1,18 @@
 /**
  * The signer. Keys are 0x hex private keys (viem `privateKeyToAccount`); the chain is Robinhood Chain (id 4663).
+ * Shared by local mode (keys from the wallet folder, signed on the server) and demo mode (keys from the visitor's
+ * browser, signed in the tab). No node imports.
  *
  * This app never talks to an RPC node. Everything a signature needs that only the chain knows (chainId, nonce, gas
  * prices) comes from GET /api/rh/account (lib/trenchy.ts `rh.account`); the transactions themselves come from the
  * API (`trade-local`, transfer deposits) or are the one plain transfer this file builds: `{ to, value, gas: 21000 }`.
+ * `sendAll` runs a list of them for one wallet: account read once → nonce + 1 per transaction → POST /api/rh/send in
+ * order → GET /api/rh/tx/:hash.
  */
 import { formatEther, parseEther, type Address, type Hex } from "viem"
 import { privateKeyToAccount, generatePrivateKey, type PrivateKeyAccount } from "viem/accounts"
+import type { Trenchy } from "../trenchy"
+import { ApiError } from "./errors"
 
 export const RH_CHAIN_ID = 4663
 
@@ -75,3 +81,50 @@ export const toEth = (wei: bigint | string): number => Number(formatEther(BigInt
 export const toWei = (eth: number | string): bigint => parseEther(String(eth) as `${number}`)
 /** The gas a plain transfer costs at the account's current maxFeePerGas, in ETH. */
 export const transferGasEth = (acct: AccountData): number => toEth(BigInt(acct.transferGas || 21000) * BigInt(acct.maxFeePerGas))
+
+// ── a run of transactions for one wallet ────────────────────────────────────
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** Poll GET /api/rh/tx/:hash until success (true), reverted (throws) or timed out (false). */
+export async function waitSuccess(api: Trenchy, hash: string, timeoutMs = 60_000, onProgress?: (msg: string) => void): Promise<boolean> {
+  const start = Date.now()
+  let lastNote = 0
+  while (Date.now() - start < timeoutMs) {
+    const s = await api.rh.tx(hash).catch(() => null)
+    if (s?.status === "success") return true
+    if (s?.status === "reverted") throw new ApiError(`Transaction reverted: ${hash}`, 502, "reverted", undefined, undefined)
+    if (onProgress && Date.now() - lastNote > 4000) {
+      lastNote = Date.now()
+      onProgress(`Still waiting for ${hash.slice(0, 10)}… (${Math.round((Date.now() - start) / 1000)}s)`)
+    }
+    await sleep(700)
+  }
+  return false
+}
+
+export type SendOptions = { confirm?: boolean; onStep?: (label: string, hash: string) => void; acct?: AccountData }
+
+/**
+ * Sign and send a run of transactions for one wallet, in order: GET /api/rh/account once, nonce + 1 per
+ * transaction, POST /api/rh/send each. An `approve` or `graduate` is confirmed (GET /api/rh/tx) before the next one
+ * goes out; the last trade is confirmed when `confirm` is true. Returns every hash, in order.
+ */
+export async function sendAll(api: Trenchy, account: PrivateKeyAccount, txs: UnsignedTx[], opts: SendOptions = {}): Promise<string[]> {
+  const acct = opts.acct ?? (await api.rh.account(account.address))
+  const nonces = new Nonces(acct)
+  const hashes: string[] = []
+  let main: string | null = null // the trade itself (the last entry that is not the fee transfer)
+  for (const tx of txs) {
+    const raw = await signTx(account, acct, nonces, tx)
+    const { hash } = await api.rh.send(raw)
+    hashes.push(hash)
+    opts.onStep?.(tx.label ?? "tx", hash)
+    if (tx.label !== "fee") main = hash
+    if (tx.label === "approve" || tx.label === "graduate") {
+      if (!(await waitSuccess(api, hash, 90_000))) throw new Error(`${tx.label} ${hash.slice(0, 10)}… not confirmed in time; check GET /api/rh/tx/${hash} before retrying`)
+    }
+  }
+  if (opts.confirm !== false && main && !(await waitSuccess(api, main, 90_000))) throw new Error(`${main.slice(0, 10)}… not confirmed in time; check GET /api/rh/tx/${main} before retrying`)
+  return hashes
+}

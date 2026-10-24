@@ -1,7 +1,6 @@
 import { body, fail, ok } from "@/lib/http"
 import { BACKUP_DIR } from "@/lib/paths"
-import { effectiveSettings, updateSettings, type Settings } from "@/lib/settings"
-import { trenchy } from "@/lib/trenchy"
+import { effectiveSettings, trenchy, updateSettings, type Settings } from "@/lib/settings"
 import { fundingWallet } from "@/lib/wallets"
 
 export const dynamic = "force-dynamic"

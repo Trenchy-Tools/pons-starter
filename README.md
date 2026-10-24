@@ -1,12 +1,12 @@
 <!-- trenchytools:header -->
 <p align="center"><img src="./.github/social.png" alt="pons starter" width="100%"></p>
 
-<p align="center"><a href="https://trenchytools-docs-production.up.railway.app/docs">Docs</a> · <a href="https://api.trenchytools.lol/api/create-api-key">Get an API key</a> · <a href="https://api.trenchytools.lol/AGENTS.md">AGENTS.md</a> · <a href="https://api.trenchytools.lol/openapi.json">OpenAPI</a> · <a href="https://trenchytools-docs-production.up.railway.app/status">Status</a> · <a href="https://t.me/trenchytools">Telegram</a> · <a href="https://x.com/trenchytoolz">X</a></p>
+<p align="center"><a href="https://pons.trenchy.tools"><b>Live demo</b></a> · <a href="https://trenchy.tools/docs">Docs</a> · <a href="https://api.trenchy.tools/api/create-api-key">Get an API key</a> · <a href="https://api.trenchy.tools/AGENTS.md">AGENTS.md</a> · <a href="https://api.trenchy.tools/openapi.json">OpenAPI</a> · <a href="https://trenchy.tools/status">Status</a> · <a href="https://t.me/trenchytools">Telegram</a> · <a href="https://x.com/trenchytoolz">X</a></p>
 
 # pons starter
 
 The official starter for launching on **pons** (Robinhood Chain, chain id 4663, native ETH) with the
-[TrenchyTools API](https://api.trenchytools.lol/AGENTS.md). One Next.js app, one process, one `npm run dev`.
+[TrenchyTools API](https://api.trenchy.tools/AGENTS.md). One Next.js app, one process, one `npm run dev`.
 A sibling of the pump.fun starter: same theme, same wallet folder, EVM instead of Solana.
 
 ## What it is
@@ -32,7 +32,7 @@ a local, single-user tool.
 cd demos/pons-starter
 npm install
 cp .env.example .env
-curl "https://api.trenchytools.lol/api/create-api-key?label=pons-starter"   # → { "apiKey": "…" }, shown once
+curl "https://api.trenchy.tools/api/create-api-key?label=pons-starter"   # → { "apiKey": "…" }, shown once
 # paste the key into .env as TRENCHY_API_KEY (or later in the app's Settings sheet)
 npm run dev
 ```
@@ -111,16 +111,17 @@ endpoint, so there is no claim row.
 
 [`lib/trenchy.ts`](lib/trenchy.ts) is the whole API client: one documented method per endpoint, `ApiError` with
 `status · code · hint · docs`, and `sendAll()` (account read → nonce run → send in order → confirm). It depends only on
-viem; drop it into your own project with [`lib/evm.ts`](lib/evm.ts) (the signer) and you have everything this app
+viem, takes the key in its constructor and runs in Node and in the browser alike; drop it into your own project with
+[`lib/core/evm.ts`](lib/core/evm.ts) (the signer) and [`lib/core/errors.ts`](lib/core/errors.ts) and you have everything this app
 uses. [`lib/wallets.ts`](lib/wallets.ts) is the folder store with the backup rule.
 
 Every error the API returns is shown exactly as returned: message, `code`, `hint`, docs link.
 
 ## Build it with AI
 
-Paste this into your coding agent together with `https://api.trenchytools.lol/AGENTS.md`:
+Paste this into your coding agent together with `https://api.trenchy.tools/AGENTS.md`:
 
-> Build a pons (Robinhood Chain) launch tool on the TrenchyTools API. Read `https://api.trenchytools.lol/AGENTS.md`
+> Build a pons (Robinhood Chain) launch tool on the TrenchyTools API. Read `https://api.trenchy.tools/AGENTS.md`
 > and `openapi.json` first; use only endpoints that exist there. Keys stay local: `trade-local` returns unsigned EVM
 > transactions, sign them with viem using `GET /api/rh/account` for chainId, nonce and fees, send with
 > `POST /api/rh/send`, confirm with `GET /api/rh/tx/:hash`, in order; confirm an `approve` before the next one. Write
@@ -140,5 +141,37 @@ docker run -p 3000:3000 -v pons-wallets:/data -e TRENCHY_API_KEY=… pons-starte
 The image is `node:24-slim` with Next's standalone output. `WALLET_BACKUP_DIR` is `/data/wallets`; mount a volume at
 `/data` or the wallet files vanish with the container. The app has no login: put it behind something that does before
 exposing it beyond localhost.
+
+## Hosted demo mode
+
+The public demo (`pons.trenchy.tools`) is this same app built in **demo mode**, so strangers can use it without anyone
+holding their keys:
+
+```bash
+NEXT_PUBLIC_DEMO=1 npm run build              # build-time flag: the pages talk to the in-browser engine
+DEMO_MODE=1 node .next/standalone/server.js   # runtime flag: every /api/* route answers 404 { code: "demo_mode" }
+```
+
+What differs from local mode (which is unchanged without the flags):
+
+- **Keys live in the visitor's browser** (`localStorage`, one entry per wallet, same shape as a wallet file). Signing happens in
+  the tab with viem: `GET /api/rh/account` (pendingNonce, fees, chainId) → `account.signTransaction` per transaction, nonce + 1
+  per transaction of a run → `POST /api/rh/send` → `GET /api/rh/tx/:hash`. The server keeps no state and serves no wallet route
+  ([`proxy.ts`](proxy.ts) → `demoGuard` in `lib/http.ts`).
+- **Backup first:** a new wallet is *not backed up* and cannot be funded, launched with, traded or gathered (`409 not_backed_up`)
+  until **Download backup** (top bar or Wallets page) has saved its key: one JSON file per click, with the CSV text inside it.
+  **Export all keys** downloads everything any time. Clearing the site's data deletes the keys.
+- **Each visitor gets their own API key**, created in the browser on the first visit (`GET /api/create-api-key?label=demo-pons`)
+  and kept in `localStorage`. Settings shows it masked, takes a pasted key, and shows the API's refusal verbatim when creation is
+  rate-limited. Every API call (and the live-trades websocket `wss://api.trenchy.tools/api/rh/data`) goes straight from the
+  browser to `https://api.trenchy.tools`.
+- **Launches and timed sells run in the tab**: keep it open. Timed sells are kept in `localStorage` and resume on reload.
+- A strict Content-Security-Policy is sent (`next.config.ts`): scripts from this origin only, network to this origin and the API only.
+
+How it is built: the pages call their routes through `appFetch` / `appEvents` ([`lib/browser/demo.ts`](lib/browser/demo.ts)).
+In demo mode those are answered by [`lib/browser/engine.ts`](lib/browser/engine.ts), which has the same routes and shapes and
+runs the same flows as the server ([`lib/core/*`](lib/core): launch executor, trading, funding, timers, the signer and its
+nonce run), on the browser key store ([`lib/browser/keystore.ts`](lib/browser/keystore.ts)) with viem keys
+([`lib/browser/signer-evm.ts`](lib/browser/signer-evm.ts)).
 
 MIT licensed.

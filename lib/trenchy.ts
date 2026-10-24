@@ -1,26 +1,21 @@
 /**
- * The TrenchyTools API client: the one file that talks to https://api.trenchytools.lol.
+ * The TrenchyTools API client: the one file that talks to https://api.trenchy.tools.
  *
  * Every method names the endpoint it calls. The API builds the EVM transactions and broadcasts them; this app signs
- * them locally with keys from the wallet folder (lib/evm.ts) and never talks to an RPC node or IPFS itself.
+ * them with viem (lib/core/evm.ts) and never talks to an RPC node or IPFS itself.
  *
- * Copy this file into your own project. It depends only on viem. Docs for every endpoint:
- * https://api.trenchytools.lol/AGENTS.md and https://trenchytools-docs-production.up.railway.app/openapi.json
+ * Client-safe (no node imports): the server libs use it with the key from settings (lib/settings.ts `trenchy()`), the
+ * hosted demo uses the same class in the browser with the visitor's own key (lib/browser/engine.ts). The key is injected
+ * through the constructor; nothing here reads settings.
+ *
+ * Copy this file into your own project with lib/core/evm.ts and lib/core/errors.ts. It depends only on viem. Docs for every endpoint:
+ * https://api.trenchy.tools/AGENTS.md and https://trenchy.tools/openapi.json
  */
 import type { PrivateKeyAccount } from "viem/accounts"
-import { Nonces, signTx, type AccountData, type UnsignedTx } from "./evm"
-import { effectiveSettings } from "./settings"
+import { sendAll, waitSuccess, type AccountData, type SendOptions, type UnsignedTx } from "./core/evm"
+import { ApiError } from "./core/errors"
 
-/** Every API error body is `{ error, code, hint?, docs? }`. All of it rides along here; show it verbatim, branch on `code`. */
-export class ApiError extends Error {
-  constructor(message: string, public status: number, public code?: string, public hint?: string, public docs?: string) {
-    super(message)
-    this.name = "ApiError"
-  }
-  toJSON() {
-    return { error: this.message, code: this.code, hint: this.hint, docs: this.docs, status: this.status }
-  }
-}
+export { ApiError }
 
 // ── shapes ──────────────────────────────────────────────────────────────────
 
@@ -155,45 +150,18 @@ export class Trenchy {
       this.get<{ wallet: string; eth: string; tokens: Array<{ token: string; balance: string }> }>(`/api/rh/balances?wallet=${wallet}${tokens.length ? `&tokens=${tokens.join(",")}` : ""}`),
   }
 
-  /** Poll GET /api/rh/tx/:hash until success (true), reverted (throws) or timed out (false). */
-  async waitSuccess(hash: string, timeoutMs = 60_000, onProgress?: (msg: string) => void): Promise<boolean> {
-    const start = Date.now()
-    let lastNote = 0
-    while (Date.now() - start < timeoutMs) {
-      const s = await this.rh.tx(hash).catch(() => null)
-      if (s?.status === "success") return true
-      if (s?.status === "reverted") throw new ApiError(`Transaction reverted: ${hash}`, 502, "reverted", undefined, undefined)
-      if (onProgress && Date.now() - lastNote > 4000) {
-        lastNote = Date.now()
-        onProgress(`Still waiting for ${hash.slice(0, 10)}… (${Math.round((Date.now() - start) / 1000)}s)`)
-      }
-      await sleep(700)
-    }
-    return false
+  /** Poll GET /api/rh/tx/:hash until success (true), reverted (throws) or timed out (false). (lib/core/evm.ts waitSuccess) */
+  waitSuccess(hash: string, timeoutMs = 60_000, onProgress?: (msg: string) => void): Promise<boolean> {
+    return waitSuccess(this, hash, timeoutMs, onProgress)
   }
 
   /**
    * Sign and send a run of transactions for one wallet, in order: GET /api/rh/account once, nonce + 1 per
    * transaction, POST /api/rh/send each. An `approve` or `graduate` is confirmed (GET /api/rh/tx) before the next one
-   * goes out; the last trade is confirmed when `confirm` is true. Returns every hash, in order.
+   * goes out; the last trade is confirmed when `confirm` is true. Returns every hash, in order. (lib/core/evm.ts sendAll)
    */
-  async sendAll(account: PrivateKeyAccount, txs: UnsignedTx[], opts: { confirm?: boolean; onStep?: (label: string, hash: string) => void; acct?: AccountData } = {}): Promise<string[]> {
-    const acct = opts.acct ?? (await this.rh.account(account.address))
-    const nonces = new Nonces(acct)
-    const hashes: string[] = []
-    let main: string | null = null // the trade itself (the last entry that is not the fee transfer)
-    for (const tx of txs) {
-      const raw = await signTx(account, acct, nonces, tx)
-      const { hash } = await this.rh.send(raw)
-      hashes.push(hash)
-      opts.onStep?.(tx.label ?? "tx", hash)
-      if (tx.label !== "fee") main = hash
-      if (tx.label === "approve" || tx.label === "graduate") {
-        if (!(await this.waitSuccess(hash, 90_000))) throw new Error(`${tx.label} ${hash.slice(0, 10)}… not confirmed in time; check GET /api/rh/tx/${hash} before retrying`)
-      }
-    }
-    if (opts.confirm !== false && main && !(await this.waitSuccess(main, 90_000))) throw new Error(`${main.slice(0, 10)}… not confirmed in time; check GET /api/rh/tx/${main} before retrying`)
-    return hashes
+  sendAll(account: PrivateKeyAccount, txs: UnsignedTx[], opts: SendOptions = {}): Promise<string[]> {
+    return sendAll(this, account, txs, opts)
   }
 
   // ── transfers (wallet → wallet, direct or through an exchange hop) ──────
@@ -225,10 +193,4 @@ export class Trenchy {
   async uploadMetadata(form: FormData): Promise<{ metadataUri: string; metadata?: { image?: string; [k: string]: unknown } }> {
     return this.call("/api/ipfs", { method: "POST", body: form })
   }
-}
-
-/** The client with the current settings. Cheap: build one per request. */
-export function trenchy(): Trenchy {
-  const { apiUrl, apiKey } = effectiveSettings()
-  return new Trenchy(apiUrl, apiKey)
 }

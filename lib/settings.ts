@@ -1,16 +1,17 @@
 /**
  * Settings: `_app/pons-starter/settings.json` in the wallet folder (written by the Settings sheet) over `.env` defaults.
  *   apiKey      TRENCHY_API_KEY
- *   apiUrl      TRENCHY_API_URL      default https://api.trenchytools.lol
+ *   apiUrl      TRENCHY_API_URL      default https://api.trenchy.tools
  *   slippage    (percent)            default 10
  *   sniperGapMs                      default 400 (gap between sniper buys after the create confirms)
  *   holderWindowS / holderDelayS     default 120 / 5 (holder buys spread over the window, after the delay)
  *   mainWallet                       the ★ wallet (0x address): pays for everything, receives gathers, default creator
  */
+import { DEFAULT_API_URL, DEFAULTS } from "./core/env"
 import { SETTINGS_FILE, readJson, writeJson } from "./paths"
+import { Trenchy } from "./trenchy"
 
-export const DEFAULT_API_URL = "https://api.trenchytools.lol"
-const DEFAULTS = { slippage: 10, sniperGapMs: 400, holderWindowS: 120, holderDelayS: 5 }
+export { DEFAULT_API_URL }
 
 export type Settings = { apiKey?: string; apiUrl?: string; slippage?: number; sniperGapMs?: number; holderWindowS?: number; holderDelayS?: number; mainWallet?: string }
 const NUMS = ["slippage", "sniperGapMs", "holderWindowS", "holderDelayS"] as const
@@ -58,4 +59,10 @@ export function effectiveSettings(): Effective {
     holderDelayS: s.holderDelayS ?? DEFAULTS.holderDelayS,
     apiKeyFrom: s.apiKey ? "settings" : envKey ? "env" : "none",
   }
+}
+
+/** The API client with the current settings (lib/trenchy.ts, key injected). Cheap: build one per request. */
+export function trenchy(): Trenchy {
+  const { apiUrl, apiKey } = effectiveSettings()
+  return new Trenchy(apiUrl, apiKey)
 }

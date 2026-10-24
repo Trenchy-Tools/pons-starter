@@ -3,7 +3,12 @@
 /**
  * The browser side of the app's own routes (app/api/*). Every failure is an ApiFailure carrying exactly what the route
  * (and, through it, the TrenchyTools API) returned: error · code · hint · docs. Show it with <ApiErrorView>.
+ *
+ * The routes are answered by this app's server in local mode and by the browser engine in demo mode: appFetch /
+ * appEvents (lib/browser/demo.ts) pick which. The pages do not know the difference.
  */
+import { appEvents, appFetch, DEMO } from "./browser/demo"
+
 export type ApiFailure = { error: string; code?: string; hint?: string; docs?: string; status: number; publicKey?: string; dir?: string }
 
 export class ApiFailureError extends Error {
@@ -13,7 +18,7 @@ export class ApiFailureError extends Error {
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(path, { ...init, headers: init.body && !(init.body instanceof FormData) ? { "content-type": "application/json", ...(init.headers ?? {}) } : init.headers })
+  const res = await appFetch(path, { ...init, headers: init.body && !(init.body instanceof FormData) ? { "content-type": "application/json", ...(init.headers ?? {}) } : init.headers })
   const text = await res.text()
   let data: Record<string, unknown> = {}
   try { data = JSON.parse(text) } catch { /* not JSON */ }
@@ -29,8 +34,9 @@ export const failureOf = (e: unknown): ApiFailure => (e instanceof ApiFailureErr
 
 /** Subscribe to one of the app's server-sent-event routes. Returns the unsubscribe. */
 export function events<T>(path: string, onEvent: (e: T) => void, onEnd?: () => void): () => void {
-  const es = new EventSource(path)
+  const es = appEvents(path)
   es.onmessage = (m) => { try { onEvent(JSON.parse(m.data) as T) } catch { /* ignore */ } }
-  es.onerror = () => { if (es.readyState === EventSource.CLOSED) onEnd?.() }
+  // the browser engine reports an error only when the stream cannot exist; a network EventSource also errors while it reconnects
+  es.onerror = () => { if (DEMO || (es as unknown as EventSource).readyState === EventSource.CLOSED) onEnd?.() }
   return () => es.close()
 }

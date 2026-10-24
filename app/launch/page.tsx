@@ -10,6 +10,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input"
 import { Pill } from "@/components/ui/pill"
 import { Mono, Table, TBody, THead } from "@/components/ui/table"
 import { api, events, failureOf, post, type ApiFailure } from "@/lib/client"
+import { DEMO, TAB_NOTE } from "@/lib/browser/demo"
 import { ponsToken, short } from "@/lib/links"
 import { cn, fmtEth } from "@/lib/utils"
 
@@ -139,6 +140,7 @@ export default function LaunchPage() {
             <Button variant="outline" onClick={simulate} disabled={!canLaunch}>{busy === "simulate" ? "Simulating…" : "Simulate"}</Button>
             <Button onClick={launch} disabled={!canLaunch}>{running ? "Launching…" : "Launch"}</Button>
           </div>
+          {DEMO ? <p className="text-muted-foreground text-xs">{TAB_NOTE}</p> : null}
         </Card>
       </div>
 
@@ -199,7 +201,7 @@ export default function LaunchPage() {
 
       {launches.length ? (
         <Card>
-          <CardHeader title="Past launches" description="From _app/pons-starter/launches.json." />
+          <CardHeader title="Past launches" description={DEMO ? "Kept in this browser." : "From _app/pons-starter/launches.json."} />
           <Table>
             <THead><tr><th>When</th><th>Coin</th><th>Token</th><th>Status</th><th>Create</th><th>Buys</th><th></th></tr></THead>
             <TBody>

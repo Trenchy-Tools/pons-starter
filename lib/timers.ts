@@ -1,54 +1,32 @@
 /**
- * Timed sells: "at +N minutes sell X % from these wallets". Rules live in server memory (they survive page reloads,
- * not a server restart) and fire through the same sell path as the Trading page (lib/trading.ts sellAll: one wallet
- * after the other, approve confirmed before each sell).
+ * Timed sells in local mode: rules live in server memory (they survive page reloads, not a server restart) and fire
+ * through the same sell path as the Trading page (lib/trading.ts sellAll: one wallet after the other, approve
+ * confirmed before each sell). The rule itself is lib/core/timers.ts.
  */
+import { fireRule, forToken, isFinished, newTimerRule, type TimerRule } from "./core/timers"
 import { serverState } from "./paths"
-import { sellAll, type SellAllResult } from "./trading"
+import { sellAll } from "./trading"
 
-export type TimerRule = {
-  id: string
-  token: string
-  publicKeys: string[]
-  percent: number
-  createdAt: number
-  dueAt: number
-  status: "pending" | "running" | "done" | "cancelled" | "error"
-  result?: SellAllResult
-  error?: string
-}
+export type { TimerRule } from "./core/timers"
 
 const state = serverState("timers", () => ({ rules: new Map<string, TimerRule & { handle?: ReturnType<typeof setTimeout> }>() }))
 
 const view = ({ handle: _h, ...rule }: TimerRule & { handle?: unknown }): TimerRule => { void _h; return rule }
 
-export const listTimers = (token?: string): TimerRule[] =>
-  [...state.rules.values()].filter((r) => !token || r.token.toLowerCase() === token.toLowerCase()).map(view).sort((a, b) => a.dueAt - b.dueAt)
+export const listTimers = (token?: string): TimerRule[] => forToken([...state.rules.values()].map(view), token)
 
 /** Schedule a rule; `minutes` from now. */
 export function addTimer(p: { token: string; publicKeys: string[]; percent: number; minutes: number }): TimerRule {
-  if (!p.publicKeys.length) throw new Error("Pick at least one wallet")
-  const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-  const rule: TimerRule & { handle?: ReturnType<typeof setTimeout> } = {
-    id, token: p.token, publicKeys: p.publicKeys, percent: Math.max(1, Math.min(100, Math.round(p.percent))),
-    createdAt: Date.now(), dueAt: Date.now() + Math.max(0, p.minutes) * 60_000, status: "pending",
-  }
-  rule.handle = setTimeout(() => void fire(id), rule.dueAt - Date.now())
-  state.rules.set(id, rule)
+  const rule: TimerRule & { handle?: ReturnType<typeof setTimeout> } = newTimerRule(p)
+  rule.handle = setTimeout(() => void fire(rule.id), rule.dueAt - Date.now())
+  state.rules.set(rule.id, rule)
   return view(rule)
 }
 
 async function fire(id: string): Promise<void> {
   const rule = state.rules.get(id)
   if (!rule || rule.status !== "pending") return
-  rule.status = "running"
-  try {
-    rule.result = await sellAll(rule.publicKeys, rule.token, rule.percent)
-    rule.status = "done"
-  } catch (e) {
-    rule.status = "error"
-    rule.error = e instanceof Error ? e.message : String(e)
-  }
+  await fireRule(rule, sellAll)
 }
 
 export function cancelTimer(id: string): TimerRule | null {
@@ -64,6 +42,6 @@ export function cancelTimer(id: string): TimerRule | null {
 /** Forget finished rules (done / cancelled / error). */
 export function clearFinished(): number {
   let n = 0
-  for (const [id, r] of state.rules) if (r.status !== "pending" && r.status !== "running") { state.rules.delete(id); n++ }
+  for (const [id, r] of state.rules) if (isFinished(r)) { state.rules.delete(id); n++ }
   return n
 }
