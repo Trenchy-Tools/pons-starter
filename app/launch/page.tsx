@@ -14,6 +14,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { ImagePlus, SlidersHorizontal } from "lucide-react"
+import { ApiCalls, type ApiCall } from "@/components/api-calls"
 import { FailureBox } from "@/components/failure"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -28,7 +29,7 @@ import { chain } from "@/lib/chain"
 type Wallet = { publicKey: string; label: string; role: string }
 type PlanRow = { publicKey: string; label: string; role: string; buyEth: number; needEth: number; haveEth?: number; shortEth?: number }
 type Plan = { rows: PlanRow[]; totalEth: number; shortEth?: number; warnings: string[]; dev: string; exempt: number }
-type Sim = { predicted?: { token: string; curve: string }; launchFeeEth?: number; expected: { tokens: number; eth: number }; simulation: { ok: boolean; steps: Array<{ label: string; ok: boolean; gasUsed: string | null; error: string | null }> }; exempt: number; warnings: string[] }
+type Sim = { predicted?: { token: string; curve: string }; launchFeeEth?: number; expected: { tokens: number; eth: number }; simulation: { ok: boolean; steps: Array<{ label: string; ok: boolean; gasUsed: string | null; error: string | null }> }; exempt: number; warnings: string[]; calls?: ApiCall[] }
 type LogEntry = { t: number; stage: string; msg: string; hash?: string; link?: string; token?: string; level?: "info" | "ok" | "warn" | "error"; done?: boolean }
 /** One buyer row: a wallet of the folder, or null = a new wallet made at launch; the amount as typed. */
 type Row = { publicKey: string | null; amount: string }
@@ -311,7 +312,7 @@ export default function LaunchPage() {
 
         <FailureBox failure={failure} />
         <div className="flex gap-3">
-          <Button variant="secondary" size="lg" className="flex-1" onClick={simulate} disabled={!!busy || launching || !main}>{busy === "simulate" ? "Simulating…" : "Simulate"}</Button>
+          <Button variant="secondary" size="lg" className="flex-1" onClick={simulate} disabled={!!busy || launching || !main} title="Builds the create against the API and runs it on a copy of the chain. Every API call is listed on the right. Nothing is sent.">{busy === "simulate" ? "Dry run…" : "Dry run · see every API call"}</Button>
           <Button size="lg" className={`flex-[2] ${short ? "bg-destructive hover:bg-destructive/90 text-white" : ""}`} onClick={launch} disabled={!!busy || launching || !!blocker}>
             {busy === "launch" ? "Starting…" : launching ? "Launching…" : blocker ?? `Launch (${plan ? eth(plan.totalEth) : "…"} ETH)`}
           </Button>
@@ -336,9 +337,13 @@ export default function LaunchPage() {
                 <div className="text-muted-foreground flex justify-between text-xs"><span>{fundFirst ? "★ sends at launch (the shortfall)" : "Short (funding is off)"}</span><Mono className={`text-xs ${short ? "text-destructive" : ""}`}>{eth(plan.shortEth ?? 0)} ETH</Mono></div>
               </div>
               {plan.warnings.map((w, i) => <p key={i} className="text-warn text-xs">{w}</p>)}
-              <p className="text-muted-foreground text-xs">Per buy: its ETH + 0.5 % API fee + 0.0005 gas reserve; the dev adds the 0.0005 ETH pons launch fee. {plan.exempt} wallets on the exempt list. ★ holds {mainBalance === undefined ? "…" : `${eth(mainBalance)} ETH`}.</p>
+              <p className="text-muted-foreground text-xs">buy + 0.5 % API fee + 0.0005 ETH gas per wallet, dev + 0.0005 launch fee · {plan.exempt} exempt · ★ holds {mainBalance === undefined ? "…" : `${eth(mainBalance)} ETH`}</p>
             </>
           ) : <p className="text-muted-foreground text-sm">…</p>}
+        </Card>
+
+        <Card className="gap-2">
+          <ApiCalls calls={sim?.calls} title="Dry run · the API calls" keysWhere={DEMO ? "this browser" : "this machine"} empty="Press Dry run: every call this app makes to api.trenchy.tools shows here with what came back. The API builds unsigned transactions; this app signs them. Nothing is sent." />
         </Card>
 
         {sim ? (
@@ -367,19 +372,7 @@ export default function LaunchPage() {
               {launching ? <span className="text-muted-foreground">…</span> : null}
             </div>
           </Card>
-        ) : (
-          <Card className="gap-2 text-sm">
-            <h2 className="text-[15px] font-semibold">How it runs</h2>
-            <ol className="text-muted-foreground list-decimal space-y-1 pl-4 text-xs">
-              <li>The image goes to IPFS (POST /api/ipfs)</li>
-              <li>"new wallet" rows are created, keys saved first</li>
-              <li>★ tops every short buyer up</li>
-              <li>Create (POST /api/rh/trade-local → sign here → POST /api/rh/send); the address is known before signing</li>
-              <li>The moment it confirms: every bundle wallet buys at once, then snipers, then holders</li>
-              <li>The Trading page opens on the coin: chart, your wallets, sell buttons</li>
-            </ol>
-          </Card>
-        )}
+        ) : null}
       </div>
     </div>
   )

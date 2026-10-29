@@ -363,7 +363,7 @@ route("POST", /^\/api\/launch\/plan$/, async (req) => {
   return ok({ ...plan, dev: resolved.dev.publicKey, exempt: resolved.exempt.length, wallets: { bundle: resolved.bundle, snipers: resolved.snipers, holders: resolved.holders } })
 })
 route("POST", /^\/api\/launch\/fund$/, async (req) => ok(await launch.fundPlan(env(), await formOf(req, true))))
-route("POST", /^\/api\/launch\/simulate$/, async (req) => ok(await launch.simulate(env(), await formOf(req))))
+route("POST", /^\/api\/launch\/simulate$/, async (req) => { const e = env(); e.api.beginTrace(); const r = await launch.simulate(e, await formOf(req)); return ok({ ...r, calls: e.api.endTrace() }) })
 // the image: the visitor's FormData goes straight to POST /api/ipfs with their key; the create takes metadata.image
 route("POST", /^\/api\/launch\/image$/, async (req) => {
   const fd = await req.formData()
