@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { Settings } from "lucide-react"
 import { Logo } from "./logo"
 import { SettingsSheet } from "./settings-sheet"
+import { SiteLinks } from "./site-links"
 import { StatusStrip } from "./status-strip"
 import { ThemeToggle } from "./theme-toggle"
 import { Button } from "./ui/button"
@@ -33,6 +34,7 @@ export function TopBar() {
           ))}
         </nav>
         <div className="ml-auto flex min-w-0 items-center gap-2">
+          <SiteLinks current="https://pons.trenchy.tools" repo="https://github.com/Trenchy-Tools/trenchytools-pons-launcher" className="mr-2" />
           <StatusStrip />
           <ThemeToggle className="hidden sm:flex" />
           <Button variant="outline" size="icon-sm" aria-label="Settings" onClick={() => setSettingsOpen(true)}><Settings /></Button>

@@ -26,10 +26,24 @@ builds every transaction (`POST /api/rh/trade-local`), tells the signer what the
 broadcasts (`POST /api/rh/send`) and confirms (`GET /api/rh/tx/:hash`). No database, no login, no encryption layer:
 a local, single-user tool.
 
+> ### ⚡ Start here
+> **Website:** [trenchy.tools](https://trenchy.tools) · **Docs:** [trenchy.tools/docs](https://trenchy.tools/docs) · **All examples:** [trenchy.tools/docs/examples](https://trenchy.tools/docs/examples) · **Code:** [github.com/Trenchy-Tools](https://github.com/Trenchy-Tools)
+> **Try it without installing:** [pons.trenchy.tools](https://pons.trenchy.tools) (wallets stay in your browser; download the backup before funding anything)
+
+## Tutorial: your first pons launch in 5 steps
+
+1. **Get a key** (one call, no account): `curl "https://api.trenchy.tools/api/create-api-key?label=me"` → paste the `apiKey` into `.env` as `TRENCHY_API_KEY`, then `npm install && npm run dev` and open http://localhost:3000.
+2. **Make a wallet.** Wallets → **+ New wallet**. The first one becomes ★ (the main wallet); its key is written to `~/Desktop/trenchytools-wallets` before it shows up. Send it a little ETH on Robinhood Chain (copy the address from the row). 0.01 ETH is plenty for a first try.
+3. **Fill the coin in.** Launch → drop an image, type a name and a symbol. The image goes to IPFS by itself when you launch. There is no mint to pick: pons derives the address from the form, and the log shows it before anything is signed.
+4. **Pick the buys.** Dev buy (0.001–0.1 ETH chips), how many **Bundle buyers** (0–16) and **Holder wallets** (0–10), an amount each. Every row is a *new wallet* unless you pick an existing one; the **Cost** card on the right shows the shortfall ★ will send. Press **Simulate** for a dry run on a copy of the chain.
+5. **Launch.** The button says what is missing until it says `Launch (x ETH)`. New wallets are created, ★ tops every buyer up, the create goes out, and the moment it confirms every bundle wallet buys at once and the **Trading** page opens on the coin: the GMGN chart, every wallet with its tokens, **25 / 50 / 100 %** sell buttons and timed sells.
+
+Everything else (dev wallet, slippage, funding, snipers) is under **Advanced options** on the Launch page.
+
 ## 5-minute start
 
 ```bash
-cd demos/pons-starter
+git clone https://github.com/Trenchy-Tools/trenchytools-pons-launcher && cd trenchytools-pons-launcher
 npm install
 cp .env.example .env
 curl "https://api.trenchy.tools/api/create-api-key?label=pons-starter"   # → { "apiKey": "…" }, shown once
