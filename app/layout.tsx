@@ -10,7 +10,11 @@ import "./globals.css"
 const sans = Space_Grotesk({ subsets: ["latin"], variable: "--font-sans" })
 const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-mono" })
 
+const DESCRIPTION = process.env.NEXT_PUBLIC_DEMO === "1" ? "Launch and trade pons coins on Robinhood Chain with the TrenchyTools API, from your browser." : "Launch and trade pons coins on Robinhood Chain with the TrenchyTools API."
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://pons.trenchy.tools"),
+  openGraph: { type: "website", siteName: "TrenchyTools", title: "pons launcher · TrenchyTools", description: DESCRIPTION, images: [{ url: "/og.png", width: 1280, height: 640, alt: "pons launcher on the TrenchyTools API" }] },
+  twitter: { card: "summary_large_image", site: "@trenchytools", title: "pons launcher · TrenchyTools", description: DESCRIPTION, images: ["/og.png"] },
   title: { default: "pons starter · TrenchyTools", template: "%s · pons starter" },
   description: process.env.NEXT_PUBLIC_DEMO === "1" ? "Launch and trade pons coins on Robinhood Chain with the TrenchyTools API, from your browser." : "Launch and trade pons coins on Robinhood Chain with the TrenchyTools API.",
   icons: { icon: "/icon.svg" },

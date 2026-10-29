@@ -15,9 +15,9 @@ A sibling of the pump.fun starter: same theme, same wallet folder, EVM instead o
   one becomes ★, the main wallet that pays for everything and receives gathers (click ☆ to move it). Click a label to
   rename. Per row **Fund** (from ★) and **Key**; tick rows for **Amount each · Fund from ★ · Fund via exchange ▾ · Gather
   to ★ · Export keys · Archive**. Results are toasts; API errors are shown verbatim.
-- **Launch**: name, symbol, image, socials, the dev wallet (★ unless changed) and **Pick buyers**: tick wallets, give each
-  an ETH amount (pills, split evenly, `+ create N new`); snipers and holders under Advanced. A funding plan, a simulation,
-  then the launch with a live log of every hash.
+- **Launch**: name, symbol, image, socials, the dev wallet (★ unless changed), how many **bundle buyers** and **holder
+  wallets** with an amount each (every row a new wallet unless you pick one). The Cost card, a dry run that lists every API
+  call, then the launch with a live log of every hash and the Trading page opening on the coin.
 - **Trading**: every wallet in a row with **[amount] Buy** and **25 / 50 / 100 %** sell buttons that act at once; tick rows
   to buy or sell across the selection or add a timed sell; the coin's trades live on the right.
 
@@ -35,10 +35,10 @@ a local, single-user tool.
 1. **Get a key** (one call, no account): `curl "https://api.trenchy.tools/api/create-api-key?label=me"` → paste the `apiKey` into `.env` as `TRENCHY_API_KEY`, then `npm install && npm run dev` and open http://localhost:3000.
 2. **Make a wallet.** Wallets → **+ New wallet**. The first one becomes ★ (the main wallet); its key is written to `./wallets` (inside the clone, git-ignored) before it shows up. Send it a little ETH on Robinhood Chain (copy the address from the row). 0.01 ETH is plenty for a first try.
 3. **Fill the coin in.** Launch → drop an image, type a name and a symbol. The image goes to IPFS by itself when you launch. There is no mint to pick: pons derives the address from the form, and the log shows it before anything is signed.
-4. **Pick the buys.** Dev buy (0.001–0.1 ETH chips), how many **Bundle buyers** (0–16) and **Holder wallets** (0–10), an amount each. Every row is a *new wallet* unless you pick an existing one; the **Cost** card on the right shows the shortfall ★ will send. Press **Simulate** for a dry run on a copy of the chain.
+4. **Pick the buys.** Dev buy (0.001–0.1 ETH chips), how many **Bundle buyers** (0–16) and **Holder wallets** (0–10), an amount each. Every row is a *new wallet* unless you pick an existing one; the **Cost** card on the right shows the shortfall ★ will send. Press **Dry run** to run the create on a copy of the chain and see every API call.
 5. **Launch.** The button says what is missing until it says `Launch (x ETH)`. New wallets are created, ★ tops every buyer up, the create goes out, and the moment it confirms every bundle wallet buys at once and the **Trading** page opens on the coin: the GMGN chart, every wallet with its tokens, **25 / 50 / 100 %** sell buttons and timed sells.
 
-Everything else (dev wallet, slippage, funding, snipers) is under **Advanced options** on the Launch page.
+The dev wallet is a select in the Buys card (★ by default). Slippage and the funding switch are under **Advanced options**. **Auto-fill demo data** fills the whole form with the trenchy.tools coin and our logo.
 
 ## 5-minute start
 
@@ -51,9 +51,9 @@ curl "https://api.trenchy.tools/api/create-api-key?label=pons-starter"   # → {
 npm run dev
 ```
 
-Open http://localhost:3000. The top bar shows three pills at all times: the API key check (`GET /api/me`), the ★ wallet,
-and the wallet folder. On **Wallets**, press **+ New wallet** (it becomes ★), send it a little ETH on Robinhood Chain, make
-two more wallets, tick them and **Fund from ★**. Start with tiny sizes (0.001 ETH) and **Simulate** before the first launch.
+Open http://localhost:3000. The status dot in the top bar says whether the key is accepted (`GET /api/me`) and whether a ★
+wallet exists; click it for Settings. On **Wallets**, press **+ New wallet** (it becomes ★) and send it a little ETH on
+Robinhood Chain. Start with tiny sizes (0.001 ETH) and press **Dry run** before the first launch.
 
 ## Where your keys are
 
@@ -88,7 +88,7 @@ pons is an EVM launchpad with a bonding curve that graduates to a Uniswap v4 poo
    An `approve` is confirmed before the transaction after it goes out.
 2. **No bundles, no Jito, no lookup tables.** The chain has a sequencer and no public mempool. "Bundle" here means: the
    create goes out, and the moment `GET /api/rh/tx/:hash` says `success`, every bundle wallet's buy is sent at once,
-   each with its own nonce. Snipers follow staggered by `sniperGapMs`; holders are spread over `holderWindowS` with
+   each with its own nonce. Holders are spread over `holderWindowS` (snipers, staggered by `sniperGapMs`, exist in the API form only) with
    jitter after `holderDelayS` (Settings).
 3. **Snipe tax.** pons taxes buys in the launch window unless the wallet is on the creator's exempt list. The create
    call carries `tokenMetadata` and `exemptWallets` (up to 31); the app puts every bundle, sniper and holder wallet on
@@ -104,12 +104,12 @@ record lands in `_app/pons-starter/launches.json`.
 **holder wallets**, an amount each, every row a *new wallet* unless you pick an existing one). Press **Launch**: the image
 goes to IPFS by itself (`POST /api/launch/image` → `POST /api/ipfs`), the new wallets are created (keys saved first), the
 ★ wallet tops every short buyer up, the create goes out, and the moment it confirms the **Trading** page opens on the coin
-(`/trading?token=…&launch=<id>`) with the chart and your wallets while the holders keep buying. Dev wallet, slippage,
-snipers and the funding switch sit under **Advanced ▾**.
+(`/trading?token=…&launch=<id>`) with the chart and your wallets while the holders keep buying. The dev wallet is a select
+in the Buys card; slippage and the funding switch sit under **Advanced options**.
 
 **Cost** (right-hand card, `POST /api/launch/plan`): per buy, ETH + the API's 0.5 % fee + a 0.0005 ETH gas reserve; the
 dev wallet adds the 0.0005 ETH pons launch fee; the shortfall is what ★ sends at launch (`fundFirst`, on by default;
-off = the run refuses when a wallet is short). **Simulate** runs the create transactions through `POST /api/rh/simulate`
+off = the run refuses when a wallet is short). **Dry run** runs the create transactions through `POST /api/rh/simulate`
 on a copy of the chain; nothing is sent. The run refuses before anything is built when a wallet file is missing or,
 after funding, any wallet is still short of ETH.
 
