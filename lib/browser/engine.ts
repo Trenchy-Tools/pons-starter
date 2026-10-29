@@ -23,7 +23,7 @@
  */
 import * as launch from "../core/launch"
 import * as trading from "../core/trading"
-import { fundDirect, fundViaExchange, gather } from "../core/funding"
+import { fundDirect, fundViaExchange, gather, sendDirect } from "../core/funding"
 import { DEFAULTS, type WalletStore } from "../core/env"
 import { RouteError, errorBody } from "../core/errors"
 import { isAddress, num, strings } from "../core/form"
@@ -298,6 +298,15 @@ route("POST", /^\/api\/wallets\/fund-exchange$/, async (req) => {
   if (!(amount > 0)) throw new RouteError("amount must be greater than zero")
   const mode: TransferMode = b.mode === "fixed" || b.mode === "private" ? b.mode : "float"
   return ok(await fundViaExchange(env(), targets.map((publicKey) => ({ publicKey, eth: amount })), mode, typeof b.venue === "string" && b.venue ? b.venue : "random"))
+})
+route("POST", /^\/api\/wallets\/send$/, async (req) => {
+  const b = await body<{ publicKeys: string[]; to: string; amount: number | string }>(req)
+  const from = targetsOf(b.publicKeys)
+  if (!from.length) throw new RouteError("publicKeys: at least one 0x wallet")
+  if (!isAddress(b.to)) throw new RouteError("to: a 0x address")
+  const amount = b.amount === "max" ? "max" : num(b.amount, 0)
+  if (amount !== "max" && !(amount > 0)) throw new RouteError('amount: ETH, or "max"')
+  return ok(await sendDirect(env(), from, canon(b.to), amount))
 })
 route("POST", /^\/api\/wallets\/gather$/, async (req) => {
   const targets = targetsOf((await body<{ publicKeys: string[] }>(req)).publicKeys)

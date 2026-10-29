@@ -91,17 +91,30 @@ export async function fundViaExchange(env: Env, targets: Array<{ publicKey: stri
 /** Each wallet → the funding wallet: everything but a gas reserve. Wallets with nothing to send are skipped. */
 export async function gather(env: Env, publicKeys: string[]): Promise<{ to: string; results: Array<FundResult & { skipped?: string }> }> {
   const funding = requireFunding(env)
+  return sendDirect(env, publicKeys, funding.publicKey, "max")
+}
+
+/**
+ * Each wallet → `to` (any 0x address: ★, another wallet of the folder, or an outside address): `amount` ETH, or
+ * "max" = the whole balance minus exactly what the transfer costs (21,000 gas × maxFeePerGas, +25 % margin for a fee
+ * bump between the read and the block). Plain transfers signed by each source (GET /api/rh/account → sign →
+ * POST /api/rh/send → GET /api/rh/tx). A source that is not backed up refuses before anything is sent.
+ */
+export async function sendDirect(env: Env, publicKeys: string[], to: string, amount: number | "max"): Promise<{ to: string; results: Array<FundResult & { skipped?: string }> }> {
   for (const pk of publicKeys) env.wallets.assertBackedUp(pk)
   const api = env.api
   const results: Array<FundResult & { skipped?: string }> = []
   for (const pk of publicKeys) {
-    if (pk.toLowerCase() === funding.publicKey.toLowerCase()) { results.push({ publicKey: pk, eth: 0, skipped: "is the ★ wallet" }); continue }
+    if (pk.toLowerCase() === to.toLowerCase()) { results.push({ publicKey: pk, eth: 0, skipped: "is the destination" }); continue }
     try {
       const acct = await api.rh.account(pk) // GET /api/rh/account: balance, nonce, fees of this wallet
-      const reserve = Math.max(GATHER_RESERVE_ETH, transferGasEth(acct))
-      const value = toWei(acct.balanceEth) - toWei(reserve.toFixed(18))
-      if (value <= 0n) { results.push({ publicKey: pk, eth: 0, skipped: `holds ${acct.balanceEth} ETH, under the gas reserve` }); continue }
-      const raw = await signTx(env.wallets.accountOf(pk), acct, new Nonces(acct), { label: "transfer", to: funding.publicKey, data: "0x", value: value.toString(), gas: acct.transferGas })
+      const gasWei = BigInt(acct.transferGas || 21000) * BigInt(acct.maxFeePerGas)
+      const reserve = (gasWei * 125n) / 100n
+      const balance = toWei(acct.balanceEth)
+      const value = amount === "max" ? balance - reserve : toWei(amount)
+      if (value <= 0n) { results.push({ publicKey: pk, eth: 0, skipped: `holds ${acct.balanceEth} ETH, not even the transfer's gas (${toEth(reserve).toFixed(8)} ETH)` }); continue }
+      if (value + reserve > balance) { results.push({ publicKey: pk, eth: 0, error: `holds ${acct.balanceEth} ETH; ${toEth(value)} + gas ${toEth(reserve).toFixed(8)} is more than that (use Max)` }); continue }
+      const raw = await signTx(env.wallets.accountOf(pk), acct, new Nonces(acct), { label: "transfer", to, data: "0x", value: value.toString(), gas: acct.transferGas })
       const { hash } = await api.rh.send(raw) // POST /api/rh/send
       results.push({ publicKey: pk, eth: toEth(value), hash })
     } catch (e) {
@@ -109,5 +122,5 @@ export async function gather(env: Env, publicKeys: string[]): Promise<{ to: stri
     }
   }
   for (const r of results) if (r.hash) r.confirmed = await waitSuccess(api, r.hash, 60_000).catch(() => false)
-  return { to: funding.publicKey, results }
+  return { to, results }
 }

@@ -12,3 +12,4 @@ export type { ExchangeLeg, FundResult } from "./core/funding"
 export const fundDirect = (targets: Array<{ publicKey: string; eth: number }>) => core.fundDirect(serverEnv(), targets)
 export const fundViaExchange = (targets: Array<{ publicKey: string; eth: number }>, mode: TransferMode = "float", venue = "random") => core.fundViaExchange(serverEnv(), targets, mode, venue)
 export const gather = (publicKeys: string[]) => core.gather(serverEnv(), publicKeys)
+export const sendDirect = (publicKeys: string[], to: string, amount: number | "max") => core.sendDirect(serverEnv(), publicKeys, to, amount)

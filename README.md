@@ -14,7 +14,9 @@ A sibling of the pump.fun starter: same theme, same wallet folder, EVM instead o
 - **Wallets**: one list, each wallet a file in `./wallets`. **+ New wallet** (× N) or **Import ▾** a 0x key; the first
   one becomes ★, the main wallet that pays for everything and receives gathers (click ☆ to move it). Click a label to
   rename. Per row **Fund** (from ★) and **Key**; tick rows for **Amount each · Fund from ★ · Fund via exchange ▾ · Gather
-  to ★ · Export keys · Archive**. Results are toasts; API errors are shown verbatim.
+  to ★** (each wallet sends its whole balance minus exactly the gas) **· Send ▾** (each wallet sends an amount, or
+  everything, to one address: ★, another wallet, or any address you paste; direct, no exchange) **· Export keys ·
+  Archive**. Results are toasts; API errors are shown verbatim.
 - **Launch**: name, symbol, image, socials, the dev wallet (★ unless changed), how many **bundle buyers** and **holder
   wallets** with an amount each (every row a new wallet unless you pick one). The Cost card, a dry run that lists every API
   call, then the launch with a live log of every hash and the Trading page opening on the coin.
