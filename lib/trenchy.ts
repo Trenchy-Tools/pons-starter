@@ -154,6 +154,9 @@ export class Trenchy {
     /** GET /api/rh/token/:token: name, symbol, venue (pons-curve | uniswap-v4), curve state. */
     token: (token: string) => this.get<TokenInfo>(`/api/rh/token/${token}`),
 
+    /** GET /api/rh/trades?token=&limit=: the coin's past trades, newest first, in the websocket's payload shape (the tape's history). */
+    tradeHistory: (token: string, limit = 100) => this.get<{ token: string; curve: string; launchBlock: number; trades: Array<Record<string, unknown>> }>(`/api/rh/trades?token=${token}&limit=${limit}`),
+
     /** GET /api/rh/creator-fees?wallet=&token=: what the creator can claim (escrow) and what the coin's curve still holds. */
     creatorFees: (wallet: string, token?: string) => this.get<CreatorFees>(`/api/rh/creator-fees?wallet=${wallet}${token ? `&token=${token}` : ""}`),
 

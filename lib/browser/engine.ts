@@ -495,7 +495,17 @@ function tradeFeed(token: string): EventStream {
       ws = new WebSocket(a.wsUrl())
       ws.onopen = () => {
         ws?.send(trading.subscribeMessage(token))
-        if (first) { first = false; send({ type: "snapshot", trades: [] }) }
+        if (first) {
+          first = false
+          send({ type: "snapshot", trades: [] })
+          // the history (GET /api/rh/trades): the dev buy and the bundle, everything before this tab subscribed
+          void a.rh.tradeHistory(token, 100).then((h) => {
+            const trades: ReturnType<typeof trading.parseTrade>[] = []
+            const wallets = walletStore.list()
+            for (const raw of h.trades) { const t = trading.parseTrade(JSON.stringify(raw), token, wallets); if (t && !seen.has(t.hash)) { seen.add(t.hash); trades.push(t) } }
+            if (!stopped) send({ type: "snapshot", trades })
+          }).catch(() => {})
+        }
       }
       ws.onmessage = (m) => {
         const t = trading.parseTrade(String(m.data), token, walletStore.list())

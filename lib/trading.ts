@@ -24,8 +24,33 @@ export const collectCreatorFees = (token: string) => core.collectCreatorFees(ser
 
 // ── live trades: one websocket to wss://…/api/rh/data, subscribeTokenTrade per coin ─────────────────────────────
 
-type Feed = { ws: WebSocket | null; url: string | null; token: string | null; trades: LiveTrade[]; seen: Set<string>; listeners: Set<(t: LiveTrade) => void> }
-const feed = serverState<Feed>("feed", () => ({ ws: null, url: null, token: null, trades: [], seen: new Set(), listeners: new Set() }))
+type Feed = { ws: WebSocket | null; url: string | null; token: string | null; trades: LiveTrade[]; seen: Set<string>; listeners: Set<(t: LiveTrade) => void>; backfilled: string | null }
+const feed = serverState<Feed>("feed", () => ({ ws: null, url: null, token: null, trades: [], seen: new Set(), listeners: new Set(), backfilled: null }))
+
+/**
+ * The coin's history (GET /api/rh/trades: the dev buy, the bundle, everything before this page subscribed), merged
+ * into the tape once per followed coin. Returns the whole tape, newest first.
+ */
+export async function backfillToken(token: string): Promise<LiveTrade[]> {
+  const key = token.toLowerCase()
+  if (feed.token?.toLowerCase() !== key || feed.backfilled === key) return feed.trades
+  feed.backfilled = key
+  const api = trenchy()
+  if (!api.configured) return feed.trades
+  try {
+    const h = await api.rh.tradeHistory(token, 100)
+    const wallets = listWallets()
+    for (const raw of h.trades) {
+      const t = core.parseTrade(JSON.stringify(raw), token, wallets)
+      if (!t || feed.seen.has(t.hash)) continue
+      feed.seen.add(t.hash)
+      feed.trades.push(t)
+    }
+    feed.trades.sort((a, b) => b.timestamp - a.timestamp)
+    if (feed.trades.length > 300) feed.trades.length = 300
+  } catch (e) { console.warn("[feed] history:", e instanceof Error ? e.message : e) }
+  return feed.trades
+}
 
 function connect(): void {
   if (!feed.url) return
