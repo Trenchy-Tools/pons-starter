@@ -1,7 +1,7 @@
 <!-- trenchytools:header -->
 <p align="center"><img src="./.github/social.png" alt="pons starter" width="100%"></p>
 
-<p align="center"><a href="https://pons.trenchy.tools"><b>Live demo</b></a> · <a href="https://trenchy.tools/docs">Docs</a> · <a href="https://api.trenchy.tools/api/create-api-key">Get an API key</a> · <a href="https://api.trenchy.tools/AGENTS.md">AGENTS.md</a> · <a href="https://api.trenchy.tools/openapi.json">OpenAPI</a> · <a href="https://trenchy.tools/status">Status</a> · <a href="https://t.me/trenchytools">Telegram</a> · <a href="https://x.com/trenchytoolz">X</a></p>
+<p align="center"><a href="https://pons.trenchy.tools"><b>Live demo</b></a> · <a href="https://trenchy.tools/docs">Docs</a> · <a href="https://api.trenchy.tools/api/create-api-key">Get an API key</a> · <a href="https://api.trenchy.tools/AGENTS.md">AGENTS.md</a> · <a href="https://api.trenchy.tools/openapi.json">OpenAPI</a> · <a href="https://trenchy.tools/status">Status</a> · <a href="https://t.me/trenchytools">Telegram</a> · <a href="https://x.com/trenchytools">X</a></p>
 
 # pons starter
 
@@ -11,7 +11,7 @@ A sibling of the pump.fun starter: same theme, same wallet folder, EVM instead o
 
 ## What it is
 
-- **Wallets**: one list, each wallet a file on your Desktop. **+ New wallet** (× N) or **Import ▾** a 0x key; the first
+- **Wallets**: one list, each wallet a file in `./wallets`. **+ New wallet** (× N) or **Import ▾** a 0x key; the first
   one becomes ★, the main wallet that pays for everything and receives gathers (click ☆ to move it). Click a label to
   rename. Per row **Fund** (from ★) and **Key**; tick rows for **Amount each · Fund from ★ · Fund via exchange ▾ · Gather
   to ★ · Export keys · Archive**. Results are toasts; API errors are shown verbatim.
@@ -33,7 +33,7 @@ a local, single-user tool.
 ## Tutorial: your first pons launch in 5 steps
 
 1. **Get a key** (one call, no account): `curl "https://api.trenchy.tools/api/create-api-key?label=me"` → paste the `apiKey` into `.env` as `TRENCHY_API_KEY`, then `npm install && npm run dev` and open http://localhost:3000.
-2. **Make a wallet.** Wallets → **+ New wallet**. The first one becomes ★ (the main wallet); its key is written to `~/Desktop/trenchytools-wallets` before it shows up. Send it a little ETH on Robinhood Chain (copy the address from the row). 0.01 ETH is plenty for a first try.
+2. **Make a wallet.** Wallets → **+ New wallet**. The first one becomes ★ (the main wallet); its key is written to `./wallets` (inside the clone, git-ignored) before it shows up. Send it a little ETH on Robinhood Chain (copy the address from the row). 0.01 ETH is plenty for a first try.
 3. **Fill the coin in.** Launch → drop an image, type a name and a symbol. The image goes to IPFS by itself when you launch. There is no mint to pick: pons derives the address from the form, and the log shows it before anything is signed.
 4. **Pick the buys.** Dev buy (0.001–0.1 ETH chips), how many **Bundle buyers** (0–16) and **Holder wallets** (0–10), an amount each. Every row is a *new wallet* unless you pick an existing one; the **Cost** card on the right shows the shortfall ★ will send. Press **Simulate** for a dry run on a copy of the chain.
 5. **Launch.** The button says what is missing until it says `Launch (x ETH)`. New wallets are created, ★ tops every buyer up, the create goes out, and the moment it confirms every bundle wallet buys at once and the **Trading** page opens on the coin: the GMGN chart, every wallet with its tokens, **25 / 50 / 100 %** sell buttons and timed sells.
@@ -62,7 +62,7 @@ Every wallet is a JSON file in one folder:
 | Setting                     | Folder                                                        |
 | --------------------------- | ------------------------------------------------------------- |
 | `WALLET_BACKUP_DIR` set     | that folder                                                   |
-| otherwise, Desktop exists   | `~/Desktop/trenchytools-wallets`                              |
+| otherwise, Desktop exists   | `./wallets` (inside the clone, git-ignored)                              |
 | otherwise                   | `~/trenchytools-wallets`                                      |
 
 Files are named `<date>-rh-<role>-<0xaddress>.json` and hold
