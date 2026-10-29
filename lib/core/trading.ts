@@ -82,6 +82,25 @@ export function creatorOf(env: Env<{ token?: string; dev: string }>, token: stri
   return env.launches.list().find((l) => l.token?.toLowerCase() === token.toLowerCase())?.dev ?? null
 }
 
+// ── creator fees: the pons escrow (GET /api/rh/creator-fees, trade-local collectCreatorFee) ────────────────────────
+
+/** The coin's creator (our launch record, else the chain's creator fee recipient) and what it can claim. `sol` carries the ETH under the name the shared Trading page reads. */
+export async function creatorFees(env: Env<{ token?: string; dev: string }>, token: string): Promise<{ creator: string; sol: number; eth: number; claimableEth: number; pendingEth: number; sweepable: boolean; reason?: string }> {
+  const creator = creatorOf(env, token) ?? (await env.api.rh.token(token)).creator
+  const f = await env.api.rh.creatorFees(creator, token)
+  return { creator, sol: f.eth, eth: f.eth, claimableEth: f.claimableEth, pendingEth: f.curve?.pendingEth ?? 0, sweepable: f.curve?.sweepable ?? false, reason: f.curve?.reason }
+}
+
+/** Claim them: trade-local { action: "collectCreatorFee", token } → [sweep?] claim, signed and sent in order by the creator (its key must be here). */
+export async function collectCreatorFees(env: Env<{ token?: string; dev: string }>, token: string): Promise<{ creator: string; signature: string; hashes: string[]; confirmed: boolean }> {
+  const creator = creatorOf(env, token) ?? (await env.api.rh.token(token)).creator
+  const account = env.wallets.accountOf(creator) // the creator's key must be stored and backed up here
+  const built = await env.api.rh.tradeLocal({ wallet: creator, action: "collectCreatorFee", token })
+  let claim = ""
+  const hashes = await sendAll(env.api, account, built.transactions, { confirm: true, onStep: (label, h) => { if (label === "claim") claim = h } })
+  return { creator, signature: claim || hashes[hashes.length - 1], hashes, confirmed: true }
+}
+
 // ── live trades: wss://…/api/rh/data, subscribeTokenTrade per coin ──────────
 
 export type LiveTrade = { hash: string; token: string; type: "buy" | "sell"; trader: string; eth: number; tokens: number; priceEth: number | null; timestamp: number; ours: string | null; venue: string | null }

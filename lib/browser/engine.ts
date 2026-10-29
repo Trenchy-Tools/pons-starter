@@ -381,6 +381,16 @@ route("GET", /^\/api\/trading\/token$/, async (req) => {
   if (!isAddress(token)) throw new RouteError("token: a 0x address")
   return ok(await api().rh.token(token))
 })
+route("GET", /^\/api\/trading\/creator-fees$/, async (req) => {
+  const token = query(req, "token")
+  if (!isAddress(token)) throw new RouteError("token: a 0x address")
+  return ok(await trading.creatorFees(env(), token))
+})
+route("POST", /^\/api\/trading\/creator-fees$/, async (req) => {
+  const b = await body<{ token: string }>(req)
+  if (!isAddress(b.token)) throw new RouteError("token: a 0x address")
+  return ok(await trading.collectCreatorFees(env(), b.token))
+})
 route("GET", /^\/api\/trading\/holdings$/, async (req) => {
   const token = query(req, "token")
   if (!isAddress(token)) throw new RouteError("token: a 0x address")

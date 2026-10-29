@@ -66,5 +66,6 @@ export const chain: ChainConfig = {
   pills: ["0.001", "0.005", "0.01", "0.05", "0.1"],
   defaultEach: "0.002",
   defaultBuy: "0.001",
-  features: { tokenAccounts: false, creatorFees: false, mayhem: false },
+  // creator fees: the pons escrow (70 % of curve fee + snipe tax, plus the creator tax), claimed by the dev wallet
+  features: { tokenAccounts: false, creatorFees: true, mayhem: false },
 }

@@ -19,6 +19,8 @@ export const sell = (publicKey: string, token: string, percent: number, slippage
 export const buy = (publicKey: string, token: string, eth: number, slippage?: number): Promise<TradeResult> => core.buy(serverEnv(), publicKey, token, eth, slippage)
 export const sellAll = (publicKeys: string[], token: string, percent: number): Promise<SellAllResult> => core.sellAll(serverEnv(), publicKeys, token, percent)
 export const creatorOf = (token: string) => core.creatorOf(serverEnv(), token)
+export const creatorFees = (token: string) => core.creatorFees(serverEnv(), token)
+export const collectCreatorFees = (token: string) => core.collectCreatorFees(serverEnv(), token)
 
 // ── live trades: one websocket to wss://…/api/rh/data, subscribeTokenTrade per coin ─────────────────────────────
 

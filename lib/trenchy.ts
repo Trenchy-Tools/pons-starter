@@ -19,7 +19,7 @@ export { ApiError }
 
 // ── shapes ──────────────────────────────────────────────────────────────────
 
-export type TxLabel = "approve" | "buy" | "sell" | "create" | "graduate" | "fee" | "transfer" | "deposit"
+export type TxLabel = "approve" | "buy" | "sell" | "create" | "graduate" | "fee" | "transfer" | "deposit" | "sweep" | "claim"
 /** One entry of a `trade-local` answer: an unsigned EVM transaction. Send them in order. */
 export type EvmTx = { chainId: number; from: string; to: string; data: string; value: string; valueEth?: string; gas?: string; label: TxLabel }
 export type Expected = { tokens: number; eth: number }
@@ -27,7 +27,8 @@ export type TokenMetadata = { name: string; symbol: string; image: string; descr
 /** The body of POST /api/rh/trade-local. */
 export type TradeBody = {
   wallet: string
-  action: "buy" | "sell" | "create"
+  /** collectCreatorFee: `[sweep?] claim` for the creator wallet (token = sweep that curve's pending fees first) */
+  action: "buy" | "sell" | "create" | "collectCreatorFee"
   token?: string
   /** buys: ETH · sells: tokens or "NN%" · create: the dev buy in ETH */
   amount?: number | string
@@ -42,6 +43,8 @@ export type TxStatus = { hash: string; status: "success" | "reverted" | "pending
 export type Simulation = { ok: boolean; steps: Array<{ label: string; ok: boolean; gasUsed: string | null; error: string | null }> }
 export type Quote = { venue: string; action: "buy" | "sell"; ethIn?: number; tokensOut?: number; tokensIn?: number; ethOut?: number; snipeTaxBps?: number; bondingProgressPct?: number; [k: string]: unknown }
 export type TokenInfo = { token: string; name: string; symbol: string; venue: "pons-curve" | "uniswap-v4"; curve: string; graduated: boolean; creator: string; curveState: Record<string, number> | null }
+/** GET /api/rh/creator-fees: the escrow balance (claimable now, every coin of the creator) and, with a token, that curve's pending fees. */
+export type CreatorFees = { wallet: string; escrow: string; claimableWei: string; claimableEth: number; eth: number; curve: { token: string; curve: string; creator: string; graduated: boolean; pendingEth: number; sweepable: boolean; reason?: string } | null }
 
 export type TransferMode = "float" | "fixed" | "private"
 export type TransferVenues = { exchange: "on" | "off" | "degraded"; checkedAt: string | null; venues: Record<string, { status: "open" | "closed" | "unknown"; reason?: string; default?: boolean }>; note?: string }
@@ -150,6 +153,9 @@ export class Trenchy {
 
     /** GET /api/rh/token/:token: name, symbol, venue (pons-curve | uniswap-v4), curve state. */
     token: (token: string) => this.get<TokenInfo>(`/api/rh/token/${token}`),
+
+    /** GET /api/rh/creator-fees?wallet=&token=: what the creator can claim (escrow) and what the coin's curve still holds. */
+    creatorFees: (wallet: string, token?: string) => this.get<CreatorFees>(`/api/rh/creator-fees?wallet=${wallet}${token ? `&token=${token}` : ""}`),
 
     /** GET /api/rh/balances?wallets=a,b,…: ETH for up to 100 wallets per call. */
     ethBalances: async (wallets: string[]): Promise<Map<string, number>> => {

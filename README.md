@@ -128,8 +128,11 @@ API's error, verbatim) is a toast. A sell sends `amount: "50%"` (the API resolve
 `[approve?] sell fee` goes out in order, the approve confirmed first. Tick rows for the bar: **Buy [x] each · Sell 25 / 50 /
 100 % of selected · Timed sell ▾** (*in N minutes sell X %*, kept in the server's memory with a countdown; a restart
 forgets them). **Live trades** on the right come from the API websocket (`wss://…/api/rh/data`, `subscribeTokenTrade`)
-with explicit `connecting… / no trades yet / N trades` states; your own wallets are flagged. pons has no creator-fee
-endpoint, so there is no claim row.
+with explicit `connecting… / no trades yet / N trades` states; your own wallets are flagged. The **Creator fees** row
+reads `GET /api/rh/creator-fees?wallet=&token=` (the creator's escrow balance plus what this coin's curve still holds:
+70 % of the curve fee and snipe tax, all of the creator tax) and **Claim** asks `trade-local` for
+`action: "collectCreatorFee"`, which answers `[sweep?] claim`; the app signs both with the creator wallet and sends
+them in order. Graduated coins were swept at graduation, so only the claim goes out.
 
 ## The one file to copy
 
