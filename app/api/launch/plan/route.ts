@@ -8,8 +8,8 @@ import { normalizeForm, planWithBalances, type LaunchForm } from "@/lib/launch"
 export async function POST(req: Request) {
   try {
     const b = await body<LaunchForm>(req)
-    // the plan and funding do not need the image yet: an empty one (not uploaded) uses the placeholder
-    const form = normalizeForm({ ...b, image: b.image || "https://placeholder.invalid/x" })
+    // the plan and funding do not need the image, name or symbol yet (the Launch page asks while the form is being typed)
+    const form = normalizeForm({ ...b, name: b.name || "plan", symbol: b.symbol || "PLAN", image: b.image || "https://placeholder.invalid/x" })
     const { resolved, ...plan } = await planWithBalances(form)
     return ok({ ...plan, dev: resolved.dev.publicKey, exempt: resolved.exempt.length, wallets: { bundle: resolved.bundle, snipers: resolved.snipers, holders: resolved.holders } })
   } catch (e) {

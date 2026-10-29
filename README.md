@@ -1,5 +1,3 @@
-**Start here → [trenchy.tools](https://trenchy.tools)** · part of [TrenchyTools](https://github.com/Trenchy-Tools) — one API key to launch and trade on pump.fun and pons.
-
 <!-- trenchytools:header -->
 <p align="center"><img src="./.github/social.png" alt="pons starter" width="100%"></p>
 
@@ -88,10 +86,18 @@ sign and send in order; wait for `success`; then the buys (`POST /api/rh/trade-l
 predicted.token, amount }` per wallet). The log shows every hash with its Blockscout link and the coin's pons page; the
 record lands in `_app/pons-starter/launches.json`.
 
-**Funding plan**: per buy, ETH + the API's 0.5 % fee + a 0.0005 ETH gas reserve; the dev wallet adds the 0.0005 ETH
-pons launch fee. "Fund from funding wallet" tops up exactly the shortfall. **Simulate** runs the create transactions
-through `POST /api/rh/simulate` on a copy of the chain; nothing is sent. The run refuses before anything is built when
-a wallet file is missing or any wallet is short of ETH.
+**The Launch page** is two things: the coin (image, name, symbol) and the buys (dev buy; how many **bundle buyers** and
+**holder wallets**, an amount each, every row a *new wallet* unless you pick an existing one). Press **Launch**: the image
+goes to IPFS by itself (`POST /api/launch/image` → `POST /api/ipfs`), the new wallets are created (keys saved first), the
+★ wallet tops every short buyer up, the create goes out, and the moment it confirms the **Trading** page opens on the coin
+(`/trading?token=…&launch=<id>`) with the chart and your wallets while the holders keep buying. Dev wallet, slippage,
+snipers and the funding switch sit under **Advanced ▾**.
+
+**Cost** (right-hand card, `POST /api/launch/plan`): per buy, ETH + the API's 0.5 % fee + a 0.0005 ETH gas reserve; the
+dev wallet adds the 0.0005 ETH pons launch fee; the shortfall is what ★ sends at launch (`fundFirst`, on by default;
+off = the run refuses when a wallet is short). **Simulate** runs the create transactions through `POST /api/rh/simulate`
+on a copy of the chain; nothing is sent. The run refuses before anything is built when a wallet file is missing or,
+after funding, any wallet is still short of ETH.
 
 **There is no vanity page.** On Solana a mint keypair can be ground for a suffix because the mint address is the
 keypair. On pons the token address is derived by CREATE2 from the whole create form (name, symbol, image, socials,
@@ -100,7 +106,9 @@ you sign (`predicted.token`); that is as far as it goes.
 
 ## Trading and timed sells
 
-Pick one of your launches or paste a token. Every wallet is a row with its ETH, its tokens and their value
+Pick one of your launches or paste a token (a launch brings you here by itself: `/trading?token=…`). GMGN's candle chart
+sits under the header (`https://www.gmgn.cc/kline/robinhood/<token>`, their embeddable widget host; `open on GMGN` next
+to it). Every wallet is a row with its ETH, its tokens and their value
 (`GET /api/rh/balances`), then **[amount] Buy** and **25% · 50% · 100%** sell buttons that act at once; the result (or the
 API's error, verbatim) is a toast. A sell sends `amount: "50%"` (the API resolves it from the real balance) and the answer
 `[approve?] sell fee` goes out in order, the approve confirmed first. Tick rows for the bar: **Buy [x] each · Sell 25 / 50 /

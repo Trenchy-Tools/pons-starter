@@ -21,7 +21,7 @@ import { where, type Env as BaseEnv } from "./env"
 import { sendAll, waitSuccess } from "./evm"
 import { ponsToken, txLink } from "../links"
 import type { Built, EvmTx, Simulation, TokenMetadata } from "../trenchy"
-import type { WalletInfo } from "./wallet-record"
+import { CHAIN, type WalletInfo } from "./wallet-record"
 
 export const API_FEE_PCT = 0.005 // the API's 0.5 % fee rides as a separate `fee` transaction
 export const GAS_RESERVE_ETH = 0.0005 // enough for a buy (or create) + fee transfer at today's prices
@@ -29,8 +29,8 @@ export const LAUNCH_FEE_ETH = 0.0005 // pons takes it inside the create transact
 export const MAX_EXEMPT = 31
 export const MAX_BUNDLE = 16
 
-/** One picked buyer: a wallet of the folder and its buy in ETH. */
-export type Buyer = { publicKey: string; amount: number }
+/** One picked buyer: a wallet of the folder (or null = a new wallet, created at launch) and its buy in ETH. */
+export type Buyer = { publicKey: string | null; amount: number }
 /**
  * A buyer group: an explicit list of wallets with their own amounts (the Launch page's "Pick buyers"), or the old
  * `count × eth` (wallets picked by role, missing ones created). `wallets` wins when it has entries.
@@ -43,13 +43,15 @@ export type LaunchForm = {
   devBuyEth: number
   bundle: BuyerGroup; snipers: BuyerGroup; holders: BuyerGroup
   slippage?: number
+  /** top every short buyer up from the ★ wallet before the create (default true); false = refuse when a wallet is short */
+  fundFirst?: boolean
 }
 
 /** A buyer with its wallet record. */
 export type Picked = WalletInfo & { amount: number }
 export type Resolved = { dev: WalletInfo; bundle: Picked[]; snipers: Picked[]; holders: Picked[]; exempt: string[]; warnings: string[] }
 
-export type LogEntry = { t: number; stage: string; msg: string; hash?: string; link?: string; level?: "info" | "ok" | "warn" | "error"; done?: boolean }
+export type LogEntry = { t: number; stage: string; msg: string; hash?: string; link?: string; token?: string; level?: "info" | "ok" | "warn" | "error"; done?: boolean }
 export type LaunchRecord = {
   id: string; createdAt: string; status: "running" | "done" | "failed"; name: string; symbol: string; image: string
   token?: string; curve?: string; dev: string; wallets: { bundle: string[]; snipers: string[]; holders: string[] }
@@ -66,8 +68,11 @@ const group = (g: Partial<BuyerGroup> | undefined, max = 500): BuyerGroup => {
   const wallets: Buyer[] = []
   if (Array.isArray(g?.wallets)) {
     for (const x of g.wallets as Array<Partial<Buyer>>) {
-      if (!isAddr(x?.publicKey) || wallets.some((b) => b.publicKey.toLowerCase() === x.publicKey!.toLowerCase())) continue
-      wallets.push({ publicKey: x.publicKey, amount: Math.max(Number(x.amount) || 0, 0) })
+      const amount = Math.max(Number(x?.amount) || 0, 0)
+      // null / "" = a new wallet, created at launch; a repeated or malformed address is dropped
+      if (!x?.publicKey) { wallets.push({ publicKey: null, amount }); continue }
+      if (!isAddr(x.publicKey) || wallets.some((b) => b.publicKey?.toLowerCase() === x.publicKey!.toLowerCase())) continue
+      wallets.push({ publicKey: x.publicKey, amount })
     }
   }
   if (wallets.length > max) throw new AppError(`at most ${max} wallets in this group`, "bad_request", 400)
@@ -84,8 +89,24 @@ export function normalizeForm(f: Partial<LaunchForm>): LaunchForm {
   const devBuyEth = Math.max(Number(f.devBuyEth) || 0, 0)
   if (devBuyEth > 0 && devBuyEth < 0.0001) throw new AppError("the dev buy minimum on pons is 0.0001 ETH", "bad_request", 400)
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined)
-  return { name, symbol, image, description: str(f.description), twitter: str(f.twitter), telegram: str(f.telegram), website: str(f.website), devWallet: str(f.devWallet), devBuyEth, bundle: group(f.bundle, MAX_BUNDLE), snipers: group(f.snipers), holders: group(f.holders), slippage: Number(f.slippage) || undefined }
+  return { name, symbol, image, description: str(f.description), twitter: str(f.twitter), telegram: str(f.telegram), website: str(f.website), devWallet: str(f.devWallet), devBuyEth, bundle: group(f.bundle, MAX_BUNDLE), snipers: group(f.snipers), holders: group(f.holders), slippage: Number(f.slippage) || undefined, fundFirst: f.fundFirst !== false }
 }
+
+/**
+ * The form with every "new wallet" row (publicKey null) replaced by a wallet created now (stored first), so the plan,
+ * the funding and the run all see the same addresses. A form without such rows comes back as is.
+ */
+export function materialize(env: Env, f: LaunchForm): LaunchForm {
+  const fill = (g: BuyerGroup, role: "bundle" | "sniper" | "holder"): BuyerGroup => {
+    if (!g.wallets?.some((b) => !b.publicKey)) return g
+    const fresh = env.wallets.create(g.wallets.filter((b) => !b.publicKey).length, role, role)
+    return { ...g, wallets: g.wallets.map((b) => ({ publicKey: b.publicKey ?? fresh.shift()!.publicKey, amount: b.amount })) }
+  }
+  return { ...f, bundle: fill(f.bundle, "bundle"), snipers: fill(f.snipers, "sniper"), holders: fill(f.holders, "holder") }
+}
+
+/** A "new wallet" row before the launch creates it: a placeholder in the plan (no address, nothing held). */
+const placeholder = (role: "bundle" | "sniper" | "holder", i: number): WalletInfo => ({ publicKey: "", chain: CHAIN, role, label: `${role} ${i + 1} (new)`, createdAt: "", app: "", file: "" })
 
 export const metadataOf = (f: LaunchForm): TokenMetadata => ({ name: f.name, symbol: f.symbol, image: f.image, description: f.description, twitter: f.twitter, telegram: f.telegram, website: f.website })
 
@@ -96,10 +117,14 @@ function pickOrCreate(env: Env, role: "bundle" | "sniper" | "holder", count: num
   return [...have, ...env.wallets.create(count - have.length, role, label)]
 }
 
-/** The buyers of a group with their amounts: the explicit list (every wallet must be stored), or `count` wallets of the role, created when too few exist. */
+/**
+ * The buyers of a group with their amounts: the explicit list (every wallet must be stored; a null = "new wallet" row is
+ * a placeholder until `materialize` runs at launch), or `count` wallets of the role, created when too few exist.
+ */
 function pick(env: Env, role: "bundle" | "sniper" | "holder", g: BuyerGroup): Picked[] {
   if (g.wallets?.length) {
-    return g.wallets.map((b) => {
+    return g.wallets.map((b, i) => {
+      if (!b.publicKey) return { ...placeholder(role, i), amount: b.amount }
       const w = env.wallets.get(b.publicKey)
       if (!w) throw new AppError(`No wallet ${b.publicKey} ${where(env.wallets)} (archived, or never created here)`, "not_backed_up", 409, "Pick wallets from the list on the Launch page")
       return { ...w, amount: b.amount }
@@ -122,7 +147,7 @@ export function resolveWallets(env: Env, f: LaunchForm): Resolved {
   const bundle = pick(env, "bundle", f.bundle)
   const snipers = pick(env, "sniper", f.snipers)
   const holders = pick(env, "holder", f.holders)
-  const buyers = [...bundle, ...snipers, ...holders].map((w) => w.publicKey).filter((pk) => pk.toLowerCase() !== dev.publicKey.toLowerCase())
+  const buyers = [...bundle, ...snipers, ...holders].map((w) => w.publicKey).filter((pk) => pk && pk.toLowerCase() !== dev.publicKey.toLowerCase())
   const warnings: string[] = []
   if (buyers.length > MAX_EXEMPT) warnings.push(`${buyers.length} buyer wallets, but pons exempts at most ${MAX_EXEMPT} from the launch-window snipe tax: the last ${buyers.length - MAX_EXEMPT} will pay it.`)
   return { dev, bundle, snipers, holders, exempt: buyers.slice(0, MAX_EXEMPT), warnings }
@@ -143,9 +168,9 @@ export function fundingPlan(f: LaunchForm, r: Resolved): Plan {
 export async function planWithBalances(env: Env, f: LaunchForm): Promise<Plan & { resolved: Resolved }> {
   const r = resolveWallets(env, f)
   const plan = fundingPlan(f, r)
-  const have = await env.api.rh.ethBalances(plan.rows.map((x) => x.publicKey))
+  const have = await env.api.rh.ethBalances(plan.rows.map((x) => x.publicKey).filter(Boolean))
   for (const row of plan.rows) {
-    row.haveEth = have.get(row.publicKey.toLowerCase()) ?? 0
+    row.haveEth = row.publicKey ? have.get(row.publicKey.toLowerCase()) ?? 0 : 0 // a "new wallet" row holds nothing yet
     row.shortEth = Math.max(0, row.needEth - row.haveEth)
   }
   plan.shortEth = plan.rows.reduce((a, x) => a + (x.shortEth ?? 0), 0)
@@ -154,7 +179,7 @@ export async function planWithBalances(env: Env, f: LaunchForm): Promise<Plan & 
 
 /** Top every short wallet up from the ★ wallet (direct transfers). The dev wallet is skipped when it is the ★ wallet itself. */
 export async function fundPlan(env: Env, f: LaunchForm): Promise<{ from: string; results: FundResult[] }> {
-  const plan = await planWithBalances(env, f)
+  const plan = await planWithBalances(env, materialize(env, f))
   const funding = env.wallets.main()
   const targets = plan.rows.filter((x) => (x.shortEth ?? 0) > 0 && x.publicKey.toLowerCase() !== funding?.publicKey.toLowerCase()).map((x) => ({ publicKey: x.publicKey, eth: +(x.shortEth ?? 0).toFixed(8) }))
   if (!targets.length) return { from: funding?.publicKey ?? "", results: [] }
@@ -195,7 +220,8 @@ export async function execute(env: Env, record: LaunchRecord, f: LaunchForm, log
   const api = env.api
   const slippage = f.slippage ?? env.slippage
   try {
-    // 1. wallets: all stored and backed up, all exempt from the snipe tax (≤ 31)
+    // 1. wallets: "new wallet" rows are created now (keys stored first); then all stored and backed up, all exempt from the snipe tax (≤ 31)
+    f = materialize(env, f)
     const r = resolveWallets(env, f)
     for (const w of [r.dev, ...r.bundle, ...r.snipers, ...r.holders]) env.wallets.assertBackedUp(w.publicKey)
     record.dev = r.dev.publicKey
@@ -204,10 +230,17 @@ export async function execute(env: Env, record: LaunchRecord, f: LaunchForm, log
     log("prepare", `Dev ${r.dev.publicKey} · ${r.bundle.length} bundle · ${r.snipers.length} snipers · ${r.holders.length} holders · ${r.exempt.length} wallets on the exempt list`)
     for (const w of r.warnings) log("prepare", w, { level: "warn" })
 
-    // 2. balances: refuse before anything is built
-    const plan = await planWithBalances(env, f)
-    const short = plan.rows.filter((x) => (x.shortEth ?? 0) > 0)
-    if (short.length) throw new AppError(`${short.length} wallet(s) are short of ETH (total ${plan.shortEth?.toFixed(5)} ETH): ${short.map((x) => `${x.label} needs ${x.needEth.toFixed(5)}, has ${(x.haveEth ?? 0).toFixed(5)}`).join("; ")}. Nothing was sent.`, "insufficient_funds", 409, "Use the Funding plan → Fund button, then launch again")
+    // 2. balances: the ★ wallet tops every short buyer up first (fundFirst, the default); then refuse before anything is built
+    let plan = await planWithBalances(env, f)
+    let short = plan.rows.filter((x) => (x.shortEth ?? 0) > 0)
+    if (short.length && f.fundFirst !== false) {
+      log("fund", `${short.length} wallet(s) short of ETH (${plan.shortEth?.toFixed(5)} ETH in total): funding them from the ★ wallet…`)
+      const funded = await fundPlan(env, f)
+      for (const x of funded.results) log("fund", x.error ? `${x.publicKey}: ${x.error}` : `${x.publicKey} +${x.eth} ETH${x.confirmed ? "" : " (not confirmed yet)"}`, { hash: x.hash, link: x.hash ? txLink(x.hash) : undefined, level: x.error ? "error" : "ok" })
+      plan = await planWithBalances(env, f)
+      short = plan.rows.filter((x) => (x.shortEth ?? 0) > 0)
+    }
+    if (short.length) throw new AppError(`${short.length} wallet(s) are short of ETH (total ${plan.shortEth?.toFixed(5)} ETH): ${short.map((x) => `${x.label} needs ${x.needEth.toFixed(5)}, has ${(x.haveEth ?? 0).toFixed(5)}`).join("; ")}. Nothing was sent.`, "insufficient_funds", 409, "Send ETH to the ★ wallet, then launch again")
     log("prepare", "Every wallet holds what the plan asks for", { level: "ok" })
 
     // 3. the create: POST /api/rh/trade-local { action: "create" } → create + fee, predicted.token
@@ -217,7 +250,7 @@ export async function execute(env: Env, record: LaunchRecord, f: LaunchForm, log
     record.token = token
     record.curve = built.predicted?.curve
     record.links = { pons: ponsToken(token) }
-    log("create", `Coin will be ${token} (pons launch fee ${built.launchFeeEth ?? LAUNCH_FEE_ETH} ETH, dev gets about ${Math.round(built.expected.tokens).toLocaleString()} tokens)`, { link: ponsToken(token) })
+    log("create", `Coin will be ${token} (pons launch fee ${built.launchFeeEth ?? LAUNCH_FEE_ETH} ETH, dev gets about ${Math.round(built.expected.tokens).toLocaleString()} tokens)`, { link: ponsToken(token), token })
 
     // sign + send in order with the dev wallet (GET /api/rh/account once, nonce + 1 per transaction); wait for the create
     const devAccount = env.wallets.accountOf(r.dev.publicKey)
@@ -226,7 +259,7 @@ export async function execute(env: Env, record: LaunchRecord, f: LaunchForm, log
     record.hashes.create = createHash
     env.launches.save(record)
     if (!(await waitSuccess(api, createHash, 120_000, (m) => log("create", m)))) throw new Error(`create ${createHash} not confirmed in 2 minutes; check ${txLink(createHash)} before launching again`)
-    log("create", `Create confirmed`, { hash: createHash, link: txLink(createHash), level: "ok" })
+    log("live", `Live on pons: ${ponsToken(token)}`, { hash: createHash, link: ponsToken(token), token, level: "ok" })
 
     // 4. buys. One function for every group: trade-local buy → sign → send → confirm, logged per wallet. Each buyer carries its own amount.
     const buy = async (w: Picked, stage: string): Promise<void> => {

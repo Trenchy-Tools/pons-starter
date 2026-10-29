@@ -18,6 +18,10 @@ export type ChainConfig = {
   explorerAddress: (address: string) => string
   explorerTx: (sig: string) => string
   coinLinks: (coin: string) => Array<{ label: string; href: string }>
+  /** GMGN's embeddable candle chart (gmgn.cc is their widget host; gmgn.ai refuses to be framed), or null when the chain has none */
+  chartUrl: (coin: string, theme: "dark" | "light") => string | null
+  /** the launch-log stream of this app, and one entry of it read into a common shape (the pump.fun and pons routes differ) */
+  launchLog: { path: (id: string) => string; read: (e: Record<string, unknown>) => { stage: string; message: string; done: boolean; error: boolean } }
   /** the "Set every amount to" pills, in the native coin */
   pills: string[]
   /** the default of the "Amount each" input (funding) and of a buy */
@@ -50,8 +54,14 @@ export const chain: ChainConfig = {
   explorerTx: (hash) => `${BLOCKSCOUT}/tx/${hash}`,
   coinLinks: (token) => [
     { label: "pons", href: `https://ponsfamily.com/launchpad/${token}` },
+    { label: "gmgn", href: `https://gmgn.ai/robinhood/token/${token}` },
     { label: "blockscout", href: `${BLOCKSCOUT}/token/${token}` },
   ],
+  chartUrl: (token, theme) => `https://www.gmgn.cc/kline/robinhood/${token}?theme=${theme}`,
+  launchLog: {
+    path: (id) => `/api/launch/${id}/log`,
+    read: (e) => ({ stage: String(e.stage ?? ""), message: String(e.msg ?? ""), done: e.done === true, error: e.level === "error" }),
+  },
   // ETH amounts: a 0.001 ETH buy on Robinhood Chain is the size the pons README starts with
   pills: ["0.001", "0.005", "0.01", "0.05", "0.1"],
   defaultEach: "0.002",

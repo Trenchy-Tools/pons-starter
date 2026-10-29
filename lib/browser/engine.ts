@@ -222,10 +222,10 @@ const route = (method: string, pattern: RegExp, h: Handler, failStatus?: number)
 const walletsView = () => ({ dir: KEYS_HOME, wallets: ks.list().map(info), mainWallet: ks.main(), archived: ks.archivedCount(), missing: [], pending: ks.pending().map((w) => ({ publicKey: w.publicKey, label: w.label })) })
 /** `publicKeys` of a body: the 0x ones, in the keystore's spelling. */
 const targetsOf = (v: unknown) => strings(v).filter(isAddress).map(canon)
-/** The launch form of a body; plan / fund take it before an image exists. */
+/** The launch form of a body; plan / fund take it before an image, a name or a symbol exists. */
 const formOf = async (req: Request, placeholderImage = false) => {
   const b = await body<launch.LaunchForm>(req)
-  return launch.normalizeForm(placeholderImage ? { ...b, image: b.image || "https://placeholder.invalid/x" } : b)
+  return launch.normalizeForm(placeholderImage ? { ...b, name: b.name || "plan", symbol: b.symbol || "PLAN", image: b.image || "https://placeholder.invalid/x" } : b)
 }
 
 // wallets

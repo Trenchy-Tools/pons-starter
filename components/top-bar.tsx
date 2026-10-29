@@ -12,9 +12,9 @@ import { useStatus } from "./providers"
 import { cn } from "@/lib/utils"
 
 const NAV = [
-  { href: "/wallets", label: "Wallets" },
   { href: "/launch", label: "Launch" },
   { href: "/trading", label: "Trading" },
+  { href: "/wallets", label: "Wallets" },
 ]
 
 /** The docs site's header layout: logo · pages · (right) status pills · theme · settings. */
@@ -24,7 +24,7 @@ export function TopBar() {
   return (
     <header className="bg-background/80 sticky top-0 z-40 border-b backdrop-blur-md">
       <div className="flex min-h-14 w-full flex-wrap items-center gap-x-8 gap-y-2 px-5 py-2 sm:px-6">
-        <Link href="/wallets" aria-label="TrenchyTools pons starter" className="flex text-[17px]"><Logo /></Link>
+        <Link href="/launch" aria-label="TrenchyTools pons starter" className="flex text-[17px]"><Logo /></Link>
         <nav className="flex items-center gap-1 text-sm">
           {NAV.map((n) => (
             <Link key={n.href} href={n.href} className={cn("rounded-md px-2.5 py-1.5 transition-colors", path.startsWith(n.href) ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")}>
