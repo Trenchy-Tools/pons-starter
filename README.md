@@ -149,7 +149,7 @@ Every error the API returns is shown exactly as returned: message, `code`, `hint
 Paste this into your coding agent together with `https://api.trenchy.tools/AGENTS.md`:
 
 > Build a pons (Robinhood Chain) launch tool on the TrenchyTools API. Read `https://api.trenchy.tools/AGENTS.md`
-> and `openapi.json` first; use only endpoints that exist there. Keys stay local: `trade-local` returns unsigned EVM
+> and `openapi.json` first; use only endpoints that exist there. `trade-local` returns unsigned EVM
 > transactions, sign them with viem using `GET /api/rh/account` for chainId, nonce and fees, send with
 > `POST /api/rh/send`, confirm with `GET /api/rh/tx/:hash`, in order; confirm an `approve` before the next one. Write
 > every generated wallet to a JSON file in a folder the user can find before it holds anything, and refuse to fund a

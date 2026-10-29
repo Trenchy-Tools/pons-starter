@@ -12,7 +12,7 @@ const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], 
 
 export const metadata: Metadata = {
   title: { default: "pons starter · TrenchyTools", template: "%s · pons starter" },
-  description: process.env.NEXT_PUBLIC_DEMO === "1" ? "Launch and trade pons coins on Robinhood Chain with the TrenchyTools API, from your browser. Your keys stay in this browser." : "Launch and trade pons coins on Robinhood Chain with the TrenchyTools API. Keys stay as files in the repo.",
+  description: process.env.NEXT_PUBLIC_DEMO === "1" ? "Launch and trade pons coins on Robinhood Chain with the TrenchyTools API, from your browser." : "Launch and trade pons coins on Robinhood Chain with the TrenchyTools API.",
   icons: { icon: "/icon.svg" },
 }
 
